@@ -77,6 +77,77 @@ plate,image
 - 训练后必须回测：以你固定的 1000 张（或同分布）数据集做对比，观察准确率和耗时。
 - 上线前保留回滚：替换 ONNX 时保留旧文件，确保可以秒级回退。
 
+## 新手必看：一批错误图可以训练几次？
+
+可以训练很多次，不是只能训练 1 次。
+
+- 一次长训：同一批数据把 `--epochs` 调大，一次跑完。
+- 多轮接力（推荐）：每轮训练后把 `best.pth` 保存下来，下一轮用 `--pretrained` 接着训。
+
+关键点：
+
+- `plate_rec_color.onnx`：部署文件（给 platex 用）。
+- `best.pth`：训练接力文件（给下一轮训练继续用）。
+- 默认镜像里的 `/workspace/weights/plate_rec_color.pth` 不会自动被你训练覆盖。
+
+建议每轮都保存：
+
+- `output/plate_rec_color.onnx`
+- `checkpoints/best.pth`（建议改名备份，如 `best_20260429_round1.pth`）
+
+## 常用参数说明（小白版）
+
+- `--pretrained`：从哪个 `.pth` 开始训练。  
+  不传则用镜像内置底座；想“接着上次继续练”就传上轮 `best.pth`。
+- `--epochs`：训练轮数。  
+  轮数越大训练越久，不代表一定更好，建议每轮训完就回测。
+- `--lr`：学习率。  
+  数值越大改动越猛，越小越稳。接力训练时建议逐轮减小。
+- `--batch-size`：每批样本数。  
+  越大越快，但吃内存更多；内存不够就调小。
+- `--hard-case-repeat`：困难样本重复倍数。  
+  小样本时建议保留默认 `4`，让模型更关注错误样本。
+- `--val-ratio`：验证集比例。  
+  样本太少时可适当调大（如 `0.15~0.2`）让验证更稳。
+
+## 推荐训练节奏（以小批 hard case 为例）
+
+以“约 200~500 条失败样本”为例，可以这样跑：
+
+1) 第一轮（快速起步）
+
+```bash
+plateai train \
+  --csv /data/hard_round1.csv \
+  --output /workspace/output/plate_rec_color.onnx \
+  --epochs 10 \
+  --lr 5e-4
+```
+
+2) 第二轮（接着训，降学习率）
+
+```bash
+plateai train \
+  --csv /data/hard_round2.csv \
+  --pretrained /workspace/checkpoints/best_round1.pth \
+  --output /workspace/output/plate_rec_color.onnx \
+  --epochs 5 \
+  --lr 2e-4
+```
+
+3) 第三轮（小步微调）
+
+```bash
+plateai train \
+  --csv /data/hard_round3.csv \
+  --pretrained /workspace/checkpoints/best_round2.pth \
+  --output /workspace/output/plate_rec_color.onnx \
+  --epochs 3 \
+  --lr 1e-4
+```
+
+如果连续两轮在固定基准集（如 1000/2000 张）都没有提升，就建议停止当前参数组合，换新样本再训，避免过拟合。
+
 ## 本地开发（不走 Docker）
 
 ```bash
