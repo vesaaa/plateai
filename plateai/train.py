@@ -20,7 +20,7 @@ from plateai.dataset import (
     repeat_hard_cases,
     split_train_val,
 )
-from plateai.model import MyNetOcrColor, load_pretrained
+from plateai.model import MyNetOcrColor, detect_cfg_from_checkpoint, load_pretrained
 
 LOG = logging.getLogger("plateai.train")
 
@@ -76,8 +76,13 @@ def run(args: argparse.Namespace) -> int:
     )
     val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False, num_workers=args.workers)
 
-    LOG.info("Building model (num_classes=%d, color_num=%d)", NUM_CLASSES, NUM_COLORS)
-    model = MyNetOcrColor(num_classes=NUM_CLASSES, color_num=NUM_COLORS, export=False)
+    cfg = None
+    if args.pretrained and os.path.exists(args.pretrained):
+        cfg = detect_cfg_from_checkpoint(args.pretrained)
+        if cfg is not None:
+            LOG.info("Detected model cfg from checkpoint: %s", cfg)
+    LOG.info("Building model (num_classes=%d, color_num=%d, cfg=%s)", NUM_CLASSES, NUM_COLORS, cfg or "default")
+    model = MyNetOcrColor(num_classes=NUM_CLASSES, color_num=NUM_COLORS, export=False, cfg=cfg)
 
     if args.pretrained and os.path.exists(args.pretrained):
         info = load_pretrained(model, args.pretrained, strict=False)
@@ -152,7 +157,7 @@ def run(args: argparse.Namespace) -> int:
         load_pretrained(model, str(best_path), strict=False)
 
     # Re-export with export=True to get the ONNX-friendly graph.
-    export_model = MyNetOcrColor(num_classes=NUM_CLASSES, color_num=NUM_COLORS, export=True)
+    export_model = MyNetOcrColor(num_classes=NUM_CLASSES, color_num=NUM_COLORS, export=True, cfg=cfg)
     export_model.load_state_dict(model.state_dict())
     export_model.eval()
     sample = torch.zeros(1, 3, 48, 168)

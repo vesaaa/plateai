@@ -108,3 +108,33 @@ def load_pretrained(model: MyNetOcrColor, ckpt_path: str, strict: bool = False) 
         state = state["state_dict"]
     missing, unexpected = model.load_state_dict(state, strict=strict)
     return {"missing": list(missing), "unexpected": list(unexpected)}
+
+
+def detect_cfg_from_checkpoint(ckpt_path: str) -> list | None:
+    """Inspect a .pth file and return the model.cfg used to train it.
+
+    The bundled plate_rec_color checkpoints store ``cfg`` directly in the
+    pickled dict; if that's missing we fall back to inferring the channel
+    counts from the first conv layer (``feature.0.weight``) since each cfg
+    preset has a unique fingerprint at that layer.
+    """
+    state = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+    if isinstance(state, dict) and "cfg" in state and isinstance(state["cfg"], list):
+        return list(state["cfg"])
+    if isinstance(state, dict) and "state_dict" in state and isinstance(state.get("cfg"), list):
+        return list(state["cfg"])
+
+    # Fallback: peek at the first conv weight shape to identify the preset.
+    sd = state.get("state_dict", state) if isinstance(state, dict) else None
+    if not isinstance(sd, dict):
+        return None
+    w = sd.get("feature.0.weight")
+    if w is None:
+        return None
+    out_channels = w.shape[0]
+    presets = {
+        8: [8, 8, 16, 16, "M", 32, 32, "M", 48, 48, "M", 64, 128],
+        16: [16, 16, 32, 32, "M", 64, 64, "M", 96, 96, "M", 128, 256],
+        32: [32, 32, 64, 64, "M", 128, 128, "M", 196, 196, "M", 256, 256],
+    }
+    return presets.get(int(out_channels))

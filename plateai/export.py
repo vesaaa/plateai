@@ -8,7 +8,7 @@ from pathlib import Path
 import torch
 
 from plateai.alphabets import NUM_CLASSES, NUM_COLORS
-from plateai.model import MyNetOcrColor, load_pretrained
+from plateai.model import MyNetOcrColor, detect_cfg_from_checkpoint, load_pretrained
 
 LOG = logging.getLogger("plateai.export")
 
@@ -22,7 +22,10 @@ def add_export_arguments(parser: argparse.ArgumentParser) -> None:
 def run(args: argparse.Namespace) -> int:
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
     color_num = None if args.no_color else NUM_COLORS
-    model = MyNetOcrColor(num_classes=NUM_CLASSES, color_num=color_num, export=True)
+    cfg = detect_cfg_from_checkpoint(args.checkpoint)
+    if cfg is not None:
+        LOG.info("Detected model cfg: %s", cfg)
+    model = MyNetOcrColor(num_classes=NUM_CLASSES, color_num=color_num, export=True, cfg=cfg)
     info = load_pretrained(model, args.checkpoint, strict=False)
     LOG.info("Loaded checkpoint %s (missing=%d unexpected=%d)",
              args.checkpoint, len(info["missing"]), len(info["unexpected"]))
