@@ -89,11 +89,38 @@ plate,image
 - `plate_rec_color.onnx`：部署文件（给 platex 用）。
 - `best.pth`：训练接力文件（给下一轮训练继续用）。
 - 默认镜像里的 `/workspace/weights/plate_rec_color.pth` 不会自动被你训练覆盖。
+- 每次训练会在 `--checkpoint-dir` 目录产出新的 `best.pth`（默认路径：`/workspace/checkpoints/best.pth`）。
+- 如果不把 `--checkpoint-dir` 挂载到宿主机持久目录，容器退出后该 `best.pth` 会丢失，下一轮就无法直接接力。
 
 建议每轮都保存：
 
 - `output/plate_rec_color.onnx`
 - `checkpoints/best.pth`（建议改名备份，如 `best_20260429_round1.pth`）
+
+Docker 示例（推荐加上 checkpoints 挂载）：
+
+```bash
+docker run --rm \
+  -v $(pwd)/data:/data:ro \
+  -v $(pwd)/output:/workspace/output \
+  -v $(pwd)/cache:/workspace/cache \
+  -v $(pwd)/checkpoints:/workspace/checkpoints \
+  ghcr.io/vesaaa/plateai:latest \
+  train \
+    --csv /data/hard.csv \
+    --checkpoint-dir /workspace/checkpoints \
+    --output /workspace/output/plate_rec_color.onnx
+```
+
+下一轮接力训练示例：
+
+```bash
+plateai train \
+  --csv /data/hard_next.csv \
+  --pretrained /workspace/checkpoints/best_20260429_round1.pth \
+  --checkpoint-dir /workspace/checkpoints \
+  --output /workspace/output/plate_rec_color.onnx
+```
 
 ## 常用参数说明（小白版）
 
