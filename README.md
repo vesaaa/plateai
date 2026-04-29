@@ -137,6 +137,46 @@ plateai train \
 - `--val-ratio`：验证集比例。  
   样本太少时可适当调大（如 `0.15~0.2`）让验证更稳。
 
+参数优先级规则：
+
+- 命令行参数（`--xxx`）优先级最高。
+- 未传命令行参数时，读取对应环境变量（ENV）。
+- ENV 也没有时，使用程序默认值。
+
+常用 ENV（与命令行一一对应）：
+
+- `PLATEAI_DEVICE` -> `--device`（`cpu` / `cuda`）
+- `PLATEAI_EPOCHS` -> `--epochs`
+- `PLATEAI_BATCH_SIZE` -> `--batch-size`
+- `PLATEAI_LR` -> `--lr`
+- `PLATEAI_WORKERS` -> `--workers`
+- `PLATEAI_VAL_RATIO` -> `--val-ratio`
+- `PLATEAI_HARD_CASE_REPEAT` -> `--hard-case-repeat`
+- `PLATEAI_PRETRAINED` -> `--pretrained`
+- `PLATEAI_CHECKPOINT_DIR` -> `--checkpoint-dir`
+- `PLATEAI_CACHE_DIR` -> `--cache-dir`
+- `PLATEAI_SEED` -> `--seed`
+- `PLATEAI_MAX_ROWS` -> `--max-rows`（`0` 表示不限）
+
+示例（手动传参 + ENV 混用）：
+
+```bash
+docker run --rm \
+  -e PLATEAI_DEVICE=cuda \
+  -e PLATEAI_BATCH_SIZE=16 \
+  -e PLATEAI_WORKERS=1 \
+  -v $(pwd)/data:/data:ro \
+  -v $(pwd)/output:/workspace/output \
+  -v $(pwd)/cache:/workspace/cache \
+  -v $(pwd)/checkpoints:/workspace/checkpoints \
+  ghcr.io/vesaaa/plateai:latest \
+  train \
+    --csv /data/hard.csv \
+    --epochs 6 \
+    --lr 3e-4 \
+    --output /workspace/output/plate_rec_color.onnx
+```
+
 ## 推荐训练节奏（以小批 hard case 为例）
 
 以“约 200~500 条失败样本”为例，可以这样跑：

@@ -24,24 +24,53 @@ from plateai.model import MyNetOcrColor, detect_cfg_from_checkpoint, load_pretra
 
 LOG = logging.getLogger("plateai.train")
 
+def _env_str(name: str, default: str) -> str:
+    v = os.getenv(name)
+    if v is None:
+        return default
+    v = v.strip()
+    return v if v else default
+
+
+def _env_int(name: str, default: int) -> int:
+    v = os.getenv(name)
+    if v is None:
+        return default
+    try:
+        return int(v.strip())
+    except Exception:
+        LOG.warning("Invalid %s=%r, fallback to %d", name, v, default)
+        return default
+
+
+def _env_float(name: str, default: float) -> float:
+    v = os.getenv(name)
+    if v is None:
+        return default
+    try:
+        return float(v.strip())
+    except Exception:
+        LOG.warning("Invalid %s=%r, fallback to %s", name, v, default)
+        return default
+
 
 def add_train_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--csv", required=True, help="CSV/Excel of (label, image-source). Header row is auto-detected.")
     parser.add_argument("--output", required=True, help="Output ONNX file path.")
-    parser.add_argument("--cache-dir", default="/workspace/cache", help="Directory used to cache downloaded images.")
-    parser.add_argument("--checkpoint-dir", default="/workspace/checkpoints", help="Directory for intermediate .pth files.")
-    parser.add_argument("--pretrained", default="/workspace/weights/plate_rec_color.pth", help="Pretrained .pth to start from.")
+    parser.add_argument("--cache-dir", default=_env_str("PLATEAI_CACHE_DIR", "/workspace/cache"), help="Directory used to cache downloaded images. ENV: PLATEAI_CACHE_DIR")
+    parser.add_argument("--checkpoint-dir", default=_env_str("PLATEAI_CHECKPOINT_DIR", "/workspace/checkpoints"), help="Directory for intermediate .pth files. ENV: PLATEAI_CHECKPOINT_DIR")
+    parser.add_argument("--pretrained", default=_env_str("PLATEAI_PRETRAINED", "/workspace/weights/plate_rec_color.pth"), help="Pretrained .pth to start from. ENV: PLATEAI_PRETRAINED")
     parser.add_argument("--url-prefix", default=None, help="Optional URL prefix used when CSV column 2 starts with '/'.")
-    parser.add_argument("--epochs", type=int, default=10)
-    parser.add_argument("--batch-size", type=int, default=32)
-    parser.add_argument("--lr", type=float, default=5e-4)
-    parser.add_argument("--workers", type=int, default=2)
-    parser.add_argument("--val-ratio", type=float, default=0.1)
-    parser.add_argument("--hard-case-repeat", type=int, default=4, help="Repeat each CSV row this many times before mixing with the train set.")
+    parser.add_argument("--epochs", type=int, default=_env_int("PLATEAI_EPOCHS", 10), help="ENV: PLATEAI_EPOCHS")
+    parser.add_argument("--batch-size", type=int, default=_env_int("PLATEAI_BATCH_SIZE", 32), help="ENV: PLATEAI_BATCH_SIZE")
+    parser.add_argument("--lr", type=float, default=_env_float("PLATEAI_LR", 5e-4), help="ENV: PLATEAI_LR")
+    parser.add_argument("--workers", type=int, default=_env_int("PLATEAI_WORKERS", 2), help="ENV: PLATEAI_WORKERS")
+    parser.add_argument("--val-ratio", type=float, default=_env_float("PLATEAI_VAL_RATIO", 0.1), help="ENV: PLATEAI_VAL_RATIO")
+    parser.add_argument("--hard-case-repeat", type=int, default=_env_int("PLATEAI_HARD_CASE_REPEAT", 4), help="Repeat each CSV row this many times before mixing with the train set. ENV: PLATEAI_HARD_CASE_REPEAT")
     parser.add_argument("--no-color-loss", action="store_true", help="Skip the color head loss (useful when CSV has no color labels).")
-    parser.add_argument("--device", default="cpu", choices=["cpu", "cuda"])
-    parser.add_argument("--seed", type=int, default=1234)
-    parser.add_argument("--max-rows", type=int, default=None, help="Limit the number of CSV rows used (debugging).")
+    parser.add_argument("--device", default=_env_str("PLATEAI_DEVICE", "cpu"), choices=["cpu", "cuda"], help="Manual device selection. ENV: PLATEAI_DEVICE")
+    parser.add_argument("--seed", type=int, default=_env_int("PLATEAI_SEED", 1234), help="ENV: PLATEAI_SEED")
+    parser.add_argument("--max-rows", type=int, default=_env_int("PLATEAI_MAX_ROWS", 0) or None, help="Limit the number of CSV rows used (debugging). ENV: PLATEAI_MAX_ROWS")
 
 
 def run(args: argparse.Namespace) -> int:
