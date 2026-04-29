@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "plateai"
+version = "0.1.0"
+description = "Lightweight CRNN trainer that fine-tunes the platex plate recognizer with CSV/Excel hard cases."
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.10"
+authors = [{ name = "vesaaa", email = "vesaaa@users.noreply.github.com" }]
+dependencies = [
+    "numpy>=1.26",
+    "opencv-python-headless>=4.8",
+    "requests>=2.31",
+    "openpyxl>=3.1",
+]
+
+[project.optional-dependencies]
+torch = [
+    "torch>=2.1",
+    "onnx>=1.15",
+]
+
+[project.scripts]
+plateai = "plateai.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["plateai*"]
+exclude = ["tests*"]
