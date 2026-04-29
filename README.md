@@ -1,31 +1,29 @@
-# PlateAI — fine-tune the platex plate recognizer with your own hard cases
+# PlateAI
 
-PlateAI is a small training pipeline that takes a CSV (or Excel) file of
-license-plate ground truth labels paired with image URLs, fine-tunes the
-plate_rec_color recognizer on your hard cases, and outputs a fresh
-`plate_rec_color.onnx` ready to drop into [`platex`](https://github.com/vesaaa/platex).
+`PlateAI` 是一个面向 `platex` 的小型增量训练工具：输入你整理好的失败样本（CSV/Excel），在 `we0091234` 的 `plate_rec_color` 预训练权重上做微调，导出新的 `plate_rec_color.onnx`，再替换到 `platex` 中循环迭代。
 
-The intended workflow is a continuous-improvement loop:
+建议的闭环流程：
 
-```
-platex serves traffic → collects misrecognised plates → you fix the labels
-        ↓
-  feed them as a CSV to plateai → output a new ONNX
-        ↓
-  swap the new ONNX into platex/models/, restart, repeat
+```text
+platex 在线识别 -> 收集识别失败样本 -> 人工修正真值标签
+      ↓
+将样本喂给 plateai 训练 -> 导出新的 ONNX
+      ↓
+替换 platex/models/plate_rec_color.onnx -> 重启服务 -> 复测
 ```
 
-## Quickstart with Docker
+## Docker 快速开始
 
 ```bash
 docker pull ghcr.io/vesaaa/plateai:latest
 
-# Sanity check
+# 1) 基础自检
 docker run --rm ghcr.io/vesaaa/plateai:latest info
 
-# Train on your CSV. expected layout:
-#   col 1  车牌真值   (e.g. 粤BAE6196)
-#   col 2  图片URL或本地路径
+# 2) 训练（示例）
+# CSV/Excel 约定：
+#   第1列 = 车牌真值（如 粤BAE6196）
+#   第2列 = 图片URL 或 本地路径
 docker run --rm \
   -v $(pwd)/data:/data:ro \
   -v $(pwd)/output:/workspace/output \
@@ -37,33 +35,30 @@ docker run --rm \
     --epochs 10 \
     --batch-size 32
 
-# Re-export an existing checkpoint without training
+# 3) 仅导出（不训练）
 docker run --rm \
   -v $(pwd)/output:/workspace/output \
   ghcr.io/vesaaa/plateai:latest \
-  export --checkpoint /workspace/output/best.pth --output /workspace/output/plate_rec_color.onnx
+  export \
+    --checkpoint /workspace/output/best.pth \
+    --output /workspace/output/plate_rec_color.onnx
 ```
 
-The trained ONNX is byte-compatible with the `plate_rec_color.onnx` slot in
-platex's `models/` directory; just replace the file and restart the service.
+训练出的 `plate_rec_color.onnx` 可直接替换 `platex/models/plate_rec_color.onnx`。
 
-## CSV / Excel format
+## 输入文件格式（CSV / Excel）
 
-PlateAI parses the input table with the following rules:
+PlateAI 解析规则如下：
 
-* The first column is the **plate label** (`粤BAE6196`, `京A12345`, ...).
-* The second column is **either an HTTP(S) URL or a local file path**. A
-  leading `/` (no scheme) is interpreted as a path under the prefix passed
-  with `--url-prefix` (defaults to the platex sample bucket).
-* A header row is auto-detected and skipped if the first cell is not a
-  plate-shaped string.
-* `.csv` files are decoded with `utf-8-sig` / `utf-8` / `gb18030` / `gbk` in
-  that order. `.xlsx` files require `openpyxl` (already bundled in the
-  image).
-* Downloaded images are cached under `/workspace/cache` (mount it as a
-  volume to share across runs).
+- 第 1 列：车牌标签，例如 `粤BAE6196`、`京A12345`。
+- 第 2 列：图片 `HTTP(S) URL` 或本地文件路径。
+- 第二列若是以 `/` 开头且无协议，会按 `--url-prefix` 进行补全（默认是 platex 示例桶前缀）。
+- 若首行不是“车牌样式字符串”，会自动识别为表头并跳过。
+- `.csv` 编码按 `utf-8-sig` -> `utf-8` -> `gb18030` -> `gbk` 顺序尝试。
+- `.xlsx` 依赖 `openpyxl`（镜像内已包含）。
+- 下载图片会缓存到 `/workspace/cache`，建议挂载为持久卷以加速重复训练。
 
-Minimal example:
+最小示例：
 
 ```csv
 plate,image
@@ -71,10 +66,18 @@ plate,image
 粤LDD7691,/SNTDA-500-LS19030650/.../plate.bmp
 ```
 
-See [`examples/sample.csv`](examples/sample.csv) for the format produced by
-platex's failure logs.
+可参考：`examples/sample.csv`。
 
-## Local development (without Docker)
+## 注意事项（强烈建议先看）
+
+- 不要从零训练：默认从 `weights/plate_rec_color.pth` 起步，避免小样本过拟合导致泛化崩掉。
+- 优先保证标签质量：错标样本会直接把模型带偏，宁可少也要准。
+- 每轮小步快跑：建议先 5~10 epoch 做快速验证，再决定是否加大训练量。
+- 保留 `cache` 挂载：重复下载图片会拖慢训练且增加外部依赖不稳定性。
+- 训练后必须回测：以你固定的 1000 张（或同分布）数据集做对比，观察准确率和耗时。
+- 上线前保留回滚：替换 ONNX 时保留旧文件，确保可以秒级回退。
+
+## 本地开发（不走 Docker）
 
 ```bash
 python -m venv .venv
@@ -85,46 +88,43 @@ plateai info
 plateai train --csv examples/sample.csv --output output/plate_rec_color.onnx --epochs 2
 ```
 
-Pretrained weights ship in `weights/plate_rec_color.pth` (the upstream
-we0091234 checkpoint). The trainer always starts from this file unless you
-pass `--pretrained`.
+默认预训练权重：`weights/plate_rec_color.pth`。如需指定其它初始权重，可传 `--pretrained`。
 
-## How fine-tuning is sized
+## 8C16G CPU 机器的经验配置
 
-Every training run starts from the bundled pretrained recognizer rather
-than from scratch — this is critical because:
+每次训练都基于预训练权重微调（不是从零开始）。在 8C16G、CPU-only 环境下，可参考：
 
-* the pretrained model was trained on hundreds of thousands of plates and
-  already speaks the platex character set perfectly,
-* the goal is just to nudge it toward your specific image distribution and
-  hard-case patterns, not to teach it Chinese plates from zero.
+- 样本约 100：10 epoch，通常几分钟。
+- 样本约 1,000：10 epoch，通常 30~60 分钟。
+- 样本约 10,000：10 epoch，通常数小时。
 
-A typical loop on an 8C / 16G CPU:
+`--hard-case-repeat` 会对疑难样本重复采样，小数据集时可提升训练信号强度。
 
-| samples | epochs | wall time |
-| ---: | ---: | ---: |
-| ~100 | 10 | a few minutes |
-| ~1 000 | 10 | ~30–60 minutes |
-| ~10 000 | 10 | a few hours |
-
-Hard cases are oversampled (`--hard-case-repeat`) so that even a small CSV
-gets enough gradient signal to bend the model.
-
-## Verifying the new ONNX in platex
-
-After training:
+## 在 platex 中验证新模型
 
 ```bash
 cp output/plate_rec_color.onnx /path/to/platex/models/plate_rec_color.onnx
 docker restart platex
 ```
 
-Then re-run your usual benchmark. If the new ONNX loaded successfully you
-should see `Dual model session pool initialized` for `plate_rec_color.onnx`
-and a `WE recognizer loaded` line in platex logs.
+然后执行你的基准测试。若加载成功，`platex` 日志中通常会看到：
 
-## Roadmap
+- `Dual model session pool initialized`（对应 `plate_rec_color.onnx`）
+- `WE recognizer loaded`
 
-* [ ] Optional CCPD bootstrap data when only a tiny CSV is available.
-* [ ] Confusion-pair-aware loss weighting for high-frequency mismatches.
-* [ ] Built-in eval against a held-out CSV at the end of training.
+## CI/CD 触发说明（重点）
+
+当前仓库的 GitHub Actions 工作流（`.github/workflows/build.yml`）触发条件是：
+
+- `push` 到 `main` 分支：会构建并推送镜像。
+- `push` tag（`v*`）：也会构建并推送镜像。
+- `workflow_dispatch`：可在 GitHub Actions 页面手动触发。
+- `pull_request` 到 `main`：只做构建校验，不推送镜像。
+
+所以现在**不是必须打 tag 才会跑**；你只要提交到 `main`，流水线就会自动触发并更新镜像（含 `latest`）。
+
+## 路线图
+
+- [ ] 小样本场景下引入可选 CCPD 预热数据。
+- [ ] 面向高频混淆对的损失加权。
+- [ ] 训练结束后内置 held-out CSV 评估报告。
