@@ -1,5 +1,8 @@
-# PlateAI training image: PyTorch CPU + plateai trainer + bundled pretrained
-# weights so that `docker run plateai train --csv ...` works out of the box.
+# PlateAI training image. Supports 3 build variants via PLATEAI_RUNTIME:
+#   - cpu
+#   - cuda11 (PyTorch cu118)
+#   - cuda12 (PyTorch cu121)
+# so CI can publish separate cpu/cuda11/cuda12 images.
 
 FROM python:3.11-slim AS base
 
@@ -19,9 +22,17 @@ RUN apt-get update \
 
 WORKDIR /workspace
 
-# Install PyTorch CPU first (large wheel) so the layer is cached cleanly.
-RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu \
-    torch==2.4.1+cpu
+# Install PyTorch first (large wheel) so the layer is cached cleanly.
+ARG PLATEAI_RUNTIME=cpu
+RUN if [ "$PLATEAI_RUNTIME" = "cpu" ]; then \
+      pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch==2.4.1+cpu; \
+    elif [ "$PLATEAI_RUNTIME" = "cuda11" ]; then \
+      pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cu118 torch==2.4.1+cu118; \
+    elif [ "$PLATEAI_RUNTIME" = "cuda12" ]; then \
+      pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cu121 torch==2.4.1+cu121; \
+    else \
+      echo "Unsupported PLATEAI_RUNTIME: $PLATEAI_RUNTIME (expected cpu|cuda11|cuda12)" && exit 1; \
+    fi
 
 # Install the rest of the runtime dependencies. Pinning narrowly to keep the
 # layer reproducible across builds.

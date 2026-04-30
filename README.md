@@ -15,10 +15,10 @@ platex 在线识别 -> 收集识别失败样本 -> 人工修正真值标签
 ## Docker 快速开始
 
 ```bash
-docker pull ghcr.io/vesaaa/plateai:latest
+docker pull ghcr.io/vesaaa/plateai:cpu
 
 # 1) 基础自检
-docker run --rm ghcr.io/vesaaa/plateai:latest info
+docker run --rm ghcr.io/vesaaa/plateai:cpu info
 
 # 2) 训练（示例）
 # CSV/Excel 约定：
@@ -28,7 +28,7 @@ docker run --rm \
   -v $(pwd)/data:/data:ro \
   -v $(pwd)/output:/workspace/output \
   -v $(pwd)/cache:/workspace/cache \
-  ghcr.io/vesaaa/plateai:latest \
+  ghcr.io/vesaaa/plateai:cpu \
   train \
     --csv /data/hard.csv \
     --output /workspace/output/plate_rec_color.onnx \
@@ -38,13 +38,22 @@ docker run --rm \
 # 3) 仅导出（不训练）
 docker run --rm \
   -v $(pwd)/output:/workspace/output \
-  ghcr.io/vesaaa/plateai:latest \
+  ghcr.io/vesaaa/plateai:cpu \
   export \
     --checkpoint /workspace/output/best.pth \
     --output /workspace/output/plate_rec_color.onnx
 ```
 
 训练出的 `plate_rec_color.onnx` 可直接替换 `platex/models/plate_rec_color.onnx`。
+
+镜像标签约定（按发布版本自动生成）：
+- CPU：`ghcr.io/vesaaa/plateai:vX.Y.Z-cpu` 与 `ghcr.io/vesaaa/plateai:cpu`
+- CUDA11：`ghcr.io/vesaaa/plateai:vX.Y.Z-cuda11` 与 `ghcr.io/vesaaa/plateai:cuda11`
+- CUDA12：`ghcr.io/vesaaa/plateai:vX.Y.Z-cuda12` 与 `ghcr.io/vesaaa/plateai:cuda12`
+
+GPU 训练提示：
+- 使用 `cuda11/cuda12` 镜像时，请为容器开启 GPU（例如 `docker run --gpus all ...`）。
+- 训练设备仍建议显式传 `--device cuda`（或 `PLATEAI_DEVICE=cuda`）。
 
 ## 输入文件格式（CSV / Excel）
 
@@ -57,6 +66,17 @@ PlateAI 解析规则如下：
 - `.csv` 编码按 `utf-8-sig` -> `utf-8` -> `gb18030` -> `gbk` 顺序尝试。
 - `.xlsx` 依赖 `openpyxl`（镜像内已包含）。
 - 下载图片会缓存到 `/workspace/cache`，建议挂载为持久卷以加速重复训练。
+
+`--url-prefix` 使用说明（非常重要）：
+
+- 当 CSV 第 2 列是完整 URL（`http://` 或 `https://`）时：**不需要** `--url-prefix`。
+- 当 CSV 第 2 列是以 `/` 开头的相对路径时：**必须**传 `--url-prefix`，用于拼接成完整下载地址。
+- 示例：第二列是 `/SNTDA-500-LS19030650/.../plate.bmp`，则可传：
+  `--url-prefix https://huizhoupark.obs.cn-south-1.myhuaweicloud.com`
+- 若频繁出现 `403`：
+  - 先确认 `--url-prefix` 是否正确；
+  - 再确认对象存储是否有防盗链/鉴权限制（部分路径可能需要签名 URL）；
+  - `403` 样本会被跳过，不会阻塞整轮训练，但会减少有效样本数。
 
 最小示例：
 
@@ -254,12 +274,8 @@ docker restart platex
 
 当前仓库的 GitHub Actions 工作流（`.github/workflows/build.yml`）触发条件是：
 
-- `push` 到 `main` 分支：会构建并推送镜像。
-- `push` tag（`v*`）：也会构建并推送镜像。
-- `workflow_dispatch`：可在 GitHub Actions 页面手动触发。
-- `pull_request` 到 `main`：只做构建校验，不推送镜像。
-
-所以现在**不是必须打 tag 才会跑**；你只要提交到 `main`，流水线就会自动触发并更新镜像（含 `latest`）。
+- 仅 `push` tag（`v*`）触发构建与推送。
+- 每次发布会同时推送 `cpu/cuda11/cuda12` 三套镜像标签（含版本标签与通道标签）。
 
 ## 路线图
 
