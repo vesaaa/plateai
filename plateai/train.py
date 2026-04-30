@@ -12,6 +12,7 @@ from pathlib import Path
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
+from torch.utils.data._utils.collate import default_collate
 
 from plateai.alphabets import NUM_CLASSES, NUM_COLORS, PLATE_CHR
 from plateai.dataset import (
@@ -23,6 +24,14 @@ from plateai.dataset import (
 from plateai.model import MyNetOcrColor, detect_cfg_from_checkpoint, load_pretrained
 
 LOG = logging.getLogger("plateai.train")
+
+
+def _safe_collate(batch):
+    """Drop bad samples (None) so one broken image won't crash training."""
+    batch = [b for b in batch if b is not None]
+    if not batch:
+        return None
+    return default_collate(batch)
 
 def _env_str(name: str, default: str) -> str:
     v = os.getenv(name)
@@ -102,8 +111,9 @@ def run(args: argparse.Namespace) -> int:
         shuffle=True,
         num_workers=args.workers,
         drop_last=False,
+        collate_fn=_safe_collate,
     )
-    val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False, num_workers=args.workers)
+    val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False, num_workers=args.workers, collate_fn=_safe_collate)
 
     cfg = None
     if args.pretrained and os.path.exists(args.pretrained):
@@ -135,7 +145,10 @@ def run(args: argparse.Namespace) -> int:
         model.train()
         train_loss = 0.0
         n_batches = 0
-        for img, label, label_len, _weight in train_loader:
+        for batch in train_loader:
+            if batch is None:
+                continue
+            img, label, label_len, _weight = batch
             img = img.to(device)
             label = label.to(device)
             label_len = label_len.to(device)
@@ -208,7 +221,10 @@ def evaluate(model, loader, device) -> float:
     correct = 0
     total = 0
     with torch.no_grad():
-        for img, label, label_len, _weight in loader:
+        for batch in loader:
+            if batch is None:
+                continue
+            img, label, label_len, _weight = batch
             img = img.to(device)
             log_probs, _ = model(img)  # (T, B, C)
             preds = log_probs.argmax(dim=-1).t()  # (B, T)

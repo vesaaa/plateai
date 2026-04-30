@@ -85,7 +85,8 @@ class PlateDataset(data.Dataset):
         s = self.samples[idx]
         img = _safe_read_image(s, max_retry=1)
         if img is None:
-            raise RuntimeError(f"Failed to decode image after retry: {s.image_path}")
+            LOG.warning("Skip undecodable sample after retry: %s", s.raw_source)
+            return None
 
         if self.is_train:
             img = _augment(img)
