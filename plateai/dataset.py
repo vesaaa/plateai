@@ -83,9 +83,9 @@ class PlateDataset(data.Dataset):
 
     def __getitem__(self, idx: int):
         s = self.samples[idx]
-        img = cv2.imdecode(np.fromfile(s.image_path, dtype=np.uint8), cv2.IMREAD_COLOR)
+        img = _safe_read_image(s, max_retry=1)
         if img is None:
-            raise RuntimeError(f"Failed to decode image: {s.image_path}")
+            raise RuntimeError(f"Failed to decode image after retry: {s.image_path}")
 
         if self.is_train:
             img = _augment(img)
@@ -113,6 +113,41 @@ class PlateDataset(data.Dataset):
             torch.tensor(label_len, dtype=torch.long),
             torch.tensor(s.weight, dtype=torch.float32),
         )
+
+
+def _safe_read_image(sample: PlateSample, max_retry: int = 1) -> np.ndarray | None:
+    """Read image with one automatic cache-heal retry.
+
+    Why:
+    - Remote cache files can occasionally be zero-byte or corrupted when
+      network fetch fails/interrupted.
+    - A single bad sample should not permanently poison subsequent runs.
+    """
+    attempts = 0
+    while attempts <= max_retry:
+        attempts += 1
+        arr = np.fromfile(sample.image_path, dtype=np.uint8)
+        if arr.size == 0:
+            LOG.warning("Empty image buffer: %s (attempt %d/%d)", sample.image_path, attempts, max_retry+1)
+        else:
+            img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+            if img is not None:
+                return img
+            LOG.warning("Failed to decode image: %s (attempt %d/%d)", sample.image_path, attempts, max_retry+1)
+
+        # Heal cache: remove broken file and re-resolve once.
+        if attempts <= max_retry:
+            try:
+                if os.path.exists(sample.image_path):
+                    os.remove(sample.image_path)
+            except Exception as exc:
+                LOG.warning("Failed to remove broken cache file %s: %s", sample.image_path, exc)
+            try:
+                sample.image_path = _resolve_image(sample.raw_source, Path(sample.image_path).parent, DEFAULT_URL_PREFIX)
+            except Exception as exc:
+                LOG.warning("Failed to re-resolve image %s: %s", sample.raw_source, exc)
+                break
+    return None
 
 
 def _augment(img: np.ndarray) -> np.ndarray:
