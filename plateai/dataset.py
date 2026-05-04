@@ -297,7 +297,13 @@ def _resolve_image(source: str, cache_dir: Path, url_prefix: str) -> str:
         LOG.info("Downloading %s", full_url)
         resp = requests.get(full_url, timeout=20)
         resp.raise_for_status()
-        cached.write_bytes(resp.content)
+        body = resp.content
+        if len(body) < 32:
+            raise ValueError(f"Image payload too small ({len(body)} bytes): {full_url}")
+        arr = np.frombuffer(body, dtype=np.uint8)
+        if cv2.imdecode(arr, cv2.IMREAD_COLOR) is None:
+            raise ValueError(f"Downloaded payload is not a decodable image (403/HTML/empty?): {full_url}")
+        cached.write_bytes(body)
     return str(cached)
 
 
