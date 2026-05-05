@@ -4,8 +4,10 @@ set -euo pipefail
 LOG=/opt/vscc/plateai/output/autotune_run.log
 {
   echo ""
-  echo "=== autotune resume platex v1.0.4 $(date -Iseconds) PLATEAU_ROUNDS=5 MIN_GAIN=0.001 MAX_ROUNDS=14 ==="
+  echo "=== autotune BENCH_MODE=full $(date -Iseconds) PLATEAU_ROUNDS=5 MIN_GAIN=0.001 MAX_ROUNDS=14 ==="
 } >>"$LOG"
+export BENCH_MODE=full
+export BENCH_TIMEOUT=120
 export PLATEAU_ROUNDS=5
 export MIN_GAIN=0.001
 export MAX_ROUNDS=14

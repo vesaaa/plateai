@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Iterative WE tuning: benchmark crop CSV -> mixed train CSV -> docker plateai train -> deploy ONNX.
+# Iterative WE tuning: benchmark platex (default mode=full) -> mixed train CSV -> docker plateai train -> deploy ONNX.
 # No platex heuristic edits — weights only.
 
 set -euo pipefail
@@ -16,6 +16,9 @@ PREFIX="${URL_PREFIX:-https://huizhoupark.obs.cn-south-1.myhuaweicloud.com}"
 API="${PLATEX_API:-http://127.0.0.1:8080/api/v1/recognize}"
 IMAGE="${PLATEAI_IMAGE:-ghcr.io/vesaaa/plateai:v1.0.3-cpu}"
 
+BENCH_MODE="${BENCH_MODE:-full}"
+BENCH_TIMEOUT="${BENCH_TIMEOUT:-120}"
+
 BENCH_CSV="${BENCH_CSV:-$DATA/2000原图.csv}"
 POOL_CSV="${POOL_CSV:-$DATA/2000原图.csv}"
 INIT_PTH="${INIT_PTH:-$DATA/best_10w_01.pth}"
@@ -28,6 +31,7 @@ MIN_GAIN="${MIN_GAIN:-0.002}"
 PLATEX_CID="${PLATEX_CID:-$(docker ps --filter publish=8080 --format '{{.ID}}' | head -1)}"
 
 mkdir -p "$OUT" "$CKPT" "$CACHE" "$BACK" "$TOOLS"
+printf '%s\n' "$BENCH_MODE" >"$OUT/.bench_mode_env.txt"
 
 log() { echo "[$(date -Iseconds)] $*"; }
 
@@ -56,8 +60,10 @@ shutil.copy2(pathlib.Path(models) / "plate_rec_color.onnx", onnx_dst)
 p = pathlib.Path(ckpt) / "best.pth"
 if p.exists():
     shutil.copy2(p, pth_dst)
+bench_mode = (pathlib.Path(out) / ".bench_mode_env.txt")
+bm = bench_mode.read_text(encoding="utf-8").strip() if bench_mode.exists() else "unknown"
 (pathlib.Path(out) / "BEST_EVAL.txt").write_text(
-    f"round={rnd}\nacc={acc}\nwe_onnx={onnx_dst}\nwe_pth={pth_dst}\n",
+    f"round={rnd}\nacc={acc}\nbench_mode={bm}\nwe_onnx={onnx_dst}\nwe_pth={pth_dst}\n",
     encoding="utf-8",
 )
 print("OPTIMAL saved", onnx_dst, pth_dst)
@@ -74,9 +80,10 @@ for round in $(seq 1 "$MAX_ROUNDS"); do
   REP="$OUT/bench_report_r${round}.jsonl"
   BENCH_LOG="$OUT/bench_stdout_r${round}.log"
 
+  log "bench mode=$BENCH_MODE timeout=${BENCH_TIMEOUT}s"
   python3 "$TOOLS/bench_platex_csv.py" \
     --csv "$BENCH_CSV" --url-prefix "$PREFIX" --api "$API" \
-    --mode crop --workers 12 --timeout 55 \
+    --mode "$BENCH_MODE" --workers 10 --timeout "$BENCH_TIMEOUT" \
     --out-err "$ERR_CSV" --out-report "$REP" \
     | tee "$BENCH_LOG"
 
@@ -94,7 +101,7 @@ PY
   then
     log "target reached"
     save_optimal "$acc" "$round"
-    notify_async "platex crop 准确率已达 ${TARGET_ACC}: 本轮 acc=$acc (round=$round)。OPTIMAL 已写入 backups。" "达到目标识别率"
+    notify_async "platex(${BENCH_MODE}) 已达 ${TARGET_ACC}: acc=$acc round=$round。见 backups/OPTIMAL_* 与 BEST_EVAL.txt。" "达到目标识别率"
     exit 0
   fi
 

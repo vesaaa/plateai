@@ -110,7 +110,11 @@ def main() -> int:
     ap.add_argument("--csv", required=True)
     ap.add_argument("--url-prefix", default=DEFAULT_PREFIX)
     ap.add_argument("--api", default="http://127.0.0.1:8080/api/v1/recognize")
-    ap.add_argument("--mode", default="crop", help="platex mode: crop|auto|full")
+    ap.add_argument(
+        "--mode",
+        default="full",
+        help="platex RecognizeRequest mode: full (detect+rec, aligns with production) | crop | auto",
+    )
     ap.add_argument("--max-rows", type=int, default=0, help="0 = all")
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--timeout", type=int, default=45)
