@@ -102,12 +102,29 @@ class MyNetOcrColor(nn.Module):
 
 
 def load_pretrained(model: MyNetOcrColor, ckpt_path: str, strict: bool = False) -> dict:
-    """Load weights from a we0091234-style .pth file."""
+    """Load weights from a we0091234-style .pth file.
+
+    When ``strict=False`` and the checkpoint has a different cfg (channel
+    mismatch), shape-incompatible tensors are silently skipped so that a
+    medium/large model can still benefit from any compatible layers.
+    """
     state = torch.load(ckpt_path, map_location="cpu", weights_only=False)
     if isinstance(state, dict) and "state_dict" in state:
         state = state["state_dict"]
-    missing, unexpected = model.load_state_dict(state, strict=strict)
-    return {"missing": list(missing), "unexpected": list(unexpected)}
+    if strict:
+        missing, unexpected = model.load_state_dict(state, strict=True)
+        return {"missing": list(missing), "unexpected": list(unexpected)}
+    # Non-strict: filter out shape mismatches before loading.
+    model_sd = model.state_dict()
+    filtered = {}
+    skipped = []
+    for k, v in state.items():
+        if k in model_sd and model_sd[k].shape == v.shape:
+            filtered[k] = v
+        elif k in model_sd:
+            skipped.append(k)
+    missing, unexpected = model.load_state_dict(filtered, strict=False)
+    return {"missing": list(missing), "unexpected": list(unexpected), "skipped_shape": skipped}
 
 
 def detect_cfg_from_checkpoint(ckpt_path: str) -> list | None:
