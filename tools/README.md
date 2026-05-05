@@ -9,6 +9,7 @@
 | `iter_train_platex_loop.sh` | 核心循环：bench → 混合 CSV → Docker 训练 → 验证部署 / 回滚。 |
 | `sample_training_pool.py` | 从 10万/20万级 CSV 抽样训练池（建议在 Docker 内执行）。 |
 | `filter_nev_csv.py` | 从错例 CSV 中筛 **新能源（platex 同款结构规则）**，输出 `plate,path` 供继续训练。 |
+| `train_nev_err_mix.sh` | 将 **新能源错例**（默认 `data/20万_err_nev.csv`）与正样本池 `build_train_mix` 合并后 **单次 Docker 训练**；产出 `output/plate_rec_color.onnx`、`checkpoints/best.pth`。 |
 | `restore_optimal_we.sh` | 默认优先 **`BASELINE_ONNX`（0.926）**，其次 backups 里 **文件名 acc 最高** 的 OPTIMAL；**不再默认读 BEST_EVAL**（易被弱跑覆盖）。需按 BEST_EVAL 恢复时：`RESTORE_FROM_BEST_EVAL=1`。 |
 | `check_baseline_files.sh` | 启动前检查 `BASELINE_ONNX`/`BASELINE_PTH` 是否存在（`start_autotune.sh` 默认调用）。 |
 | `bench_platex_csv.py` | 固定集评测。 |
@@ -67,3 +68,11 @@ docker run --rm --entrypoint python3 \
   --input /ws/data/20万_err.csv \
   --output /ws/data/20万_err_nev.csv
 ```
+
+### 新能源车错例池一次性训练（`20万_err_nev.csv` + 正样本池）
+
+```bash
+bash /opt/vscc/plateai/tools/train_nev_err_mix.sh
+```
+
+常用覆盖：`POOL_CSV`、`MIX_MAX_ROWS`、`POS_RATIO`、`EPOCHS`、`TRAIN_MAX_ROWS`、`PLATEAI_IMAGE`。
