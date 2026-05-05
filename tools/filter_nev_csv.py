@@ -23,12 +23,35 @@ import csv
 import sys
 from pathlib import Path
 
-_ROOT = Path(__file__).resolve().parents[1]
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
+# Must stay identical to ``plateai/plateai/alphabets.py`` (fallback when repo has no package dir).
+_EMBEDDED_PLATE_CHR = (
+    "#"
+    "京沪津渝冀晋蒙辽吉黑苏浙皖闽赣鲁豫鄂湘粤桂琼川贵云藏陕甘青宁新学警港澳挂使领民航危"
+    "0123456789"
+    "ABCDEFGHJKLMNPQRSTUVWXYZ"
+    "险品"
+)
 
-from plateai.alphabets import PLATE_CHR  # noqa: E402
 
+def _resolve_plate_chr() -> tuple[str, ...]:
+    """Prefer ``plateai.alphabets`` from repo root; else embedded charset (tools-only deploy)."""
+    here = Path(__file__).resolve().parent
+    for base in [here, *here.parents]:
+        if not (base / "plateai" / "alphabets.py").is_file():
+            continue
+        root = str(base)
+        if root not in sys.path:
+            sys.path.insert(0, root)
+        try:
+            from plateai.alphabets import PLATE_CHR as pc  # noqa: PLC0415
+
+            return pc
+        except ImportError:
+            continue
+    return _EMBEDDED_PLATE_CHR
+
+
+PLATE_CHR = _resolve_plate_chr()
 _PROV_CHARS = set(PLATE_CHR[1:35])
 
 
