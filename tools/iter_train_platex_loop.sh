@@ -155,10 +155,11 @@ PY
     PT_IN="$CKPT/best.pth"
   fi
 
-  log "docker train (pretrained=$PT_IN)"
+  log "docker train (pretrained=$PT_IN); cache host=$CACHE -> /workspace/cache (reuse downloads)"
   docker rm -f "plateai_autotune_${round}" 2>/dev/null || true
   docker run --name "plateai_autotune_${round}" \
     -e PLATEAI_DEVICE=cpu -e PLATEAI_WORKERS=4 -e PLATEAI_BATCH_SIZE=14 \
+    -e PLATEAI_CACHE_DIR=/workspace/cache \
     -v "$DATA:/data:ro" -v "$CACHE:/workspace/cache" -v "$CKPT:/workspace/checkpoints" \
     -v "$OUT:/workspace/output" -v "$PT_IN:/workspace/init.pth:ro" \
     "$IMAGE" train \
