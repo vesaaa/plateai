@@ -1,17 +1,19 @@
 #!/usr/bin/env bash
-# Server-side: append log header and start iterative training (no secrets in repo).
+# Backwards-compatible thin wrapper: same env as before, then start_autotune.sh in background.
 set -euo pipefail
-LOG=/opt/vscc/plateai/output/autotune_run.log
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LOG="${AUTO_LOG:-/opt/vscc/plateai/output/autotune_run.log}"
 {
   echo ""
-  echo "=== autotune BENCH_MODE=full $(date -Iseconds) PLATEAU_ROUNDS=5 MIN_GAIN=0.001 MAX_ROUNDS=14 ==="
+  echo "=== remote_start_autotune_env $(date -Iseconds) (delegates to start_autotune.sh) ==="
 } >>"$LOG"
-export BENCH_MODE=full
-export BENCH_TIMEOUT=120
-export PLATEAU_ROUNDS=5
-export MIN_GAIN=0.001
-export MAX_ROUNDS=14
-export PLATEAI_IMAGE=ghcr.io/vesaaa/plateai:v1.0.3-cpu
-# Caller must: export NOTIFY_WEBHOOK_URL='https://...' (optional)
-nohup bash /opt/vscc/plateai/tools/iter_train_platex_loop.sh >>"$LOG" 2>&1 &
-echo "started pid=$!"
+export BENCH_MODE="${BENCH_MODE:-full}"
+export BENCH_TIMEOUT="${BENCH_TIMEOUT:-120}"
+export PLATEAU_ROUNDS="${PLATEAU_ROUNDS:-5}"
+export MIN_GAIN="${MIN_GAIN:-0.001}"
+export MAX_ROUNDS="${MAX_ROUNDS:-14}"
+export PLATEAI_IMAGE="${PLATEAI_IMAGE:-ghcr.io/vesaaa/plateai:v1.0.3-cpu}"
+export AUTO_LOG="$LOG"
+export AUTO_BACKGROUND=1
+export AUTO_APPEND_HEADER=0
+bash "$HERE/start_autotune.sh"

@@ -12,3 +12,4 @@ cache/
 checkpoints/
 runs/
 *.log
+tools/autotune.env
