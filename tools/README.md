@@ -9,6 +9,7 @@
 | `iter_train_platex_loop.sh` | 核心循环：bench → 混合 CSV → Docker 训练 → 验证部署 / 回滚。 |
 | `sample_training_pool.py` | 从 10万/20万级 CSV 抽样训练池（建议在 Docker 内执行）。 |
 | `restore_optimal_we.sh` | 从 `BEST_EVAL.txt` 或 `OPTIMAL_*` 恢复 WE 权重并重启 platex。 |
+| `check_baseline_files.sh` | 启动前检查 `BASELINE_ONNX`/`BASELINE_PTH` 是否存在（`start_autotune.sh` 默认调用）。 |
 | `bench_platex_csv.py` | 固定集评测。 |
 | `build_train_mix.py` | 错例 + 正样本池合并。 |
 
@@ -30,6 +31,8 @@ bash /opt/vscc/plateai/tools/start_autotune.sh
 ```
 
 基线说明：`iter_train_platex_loop.sh` 会在 **`backups/OPTIMAL_*acc_0_926000*`** 存在时，把 **accepted 回滚快照** 初始化为该黄金 WE；bench 只有 **≥ BASELINE_ACC** 才覆盖 `BEST_EVAL`；训练后 verify 需 **同时优于会话最优且优于 BASELINE_ACC** 才保留部署。若整轮结束仍 **低于 BASELINE_ACC**，退出时会 **自动恢复** 基线 ONNX/`best.pth` 并更新 `BEST_EVAL`。
+
+手动自检：`BASELINE_ONNX=/path/a.onnx ONLY_WARN=1 bash tools/check_baseline_files.sh` 仅告警不退出；默认 **缺文件 exit 1**。
 
 ### 大池抽样（宿主机无 plateai 包时）
 

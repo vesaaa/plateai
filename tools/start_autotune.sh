@@ -52,6 +52,11 @@ if [[ ! -f "$LOOP" ]]; then
   exit 1
 fi
 
+BLCHK="$TOOLS/check_baseline_files.sh"
+if [[ "${AUTO_CHECK_BASELINE:-1}" == "1" ]] && [[ -f "$BLCHK" ]]; then
+  bash "$BLCHK"
+fi
+
 appended=false
 if [[ "${AUTO_APPEND_HEADER:-1}" == "1" ]]; then
   {
