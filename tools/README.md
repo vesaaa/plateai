@@ -8,7 +8,7 @@
 | `start_autotune.sh` | 启动迭代调优；可选 `autotune.env`（见 `autotune.env.example`）。 |
 | `iter_train_platex_loop.sh` | 核心循环：bench → 混合 CSV → Docker 训练 → 验证部署 / 回滚。 |
 | `sample_training_pool.py` | 从 10万/20万级 CSV 抽样训练池（建议在 Docker 内执行）。 |
-| `restore_optimal_we.sh` | 从 `BEST_EVAL.txt` 或 `OPTIMAL_*` 恢复 WE 权重并重启 platex。 |
+| `restore_optimal_we.sh` | 默认优先 **`BASELINE_ONNX`（0.926）**，其次 backups 里 **文件名 acc 最高** 的 OPTIMAL；**不再默认读 BEST_EVAL**（易被弱跑覆盖）。需按 BEST_EVAL 恢复时：`RESTORE_FROM_BEST_EVAL=1`。 |
 | `check_baseline_files.sh` | 启动前检查 `BASELINE_ONNX`/`BASELINE_PTH` 是否存在（`start_autotune.sh` 默认调用）。 |
 | `bench_platex_csv.py` | 固定集评测。 |
 | `build_train_mix.py` | 错例 + 正样本池合并。 |
