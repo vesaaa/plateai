@@ -17,8 +17,8 @@ export PLATEAI_HOME
 ENV_FILE="${AUTO_ENV:-$TOOLS/autotune.env}"
 if [[ -f "$ENV_FILE" ]]; then
   set -a
-  # shellcheck source=/dev/null
-  source "$ENV_FILE"
+  # shellcheck disable=SC1090
+  source <(sed 's/\r$//' "$ENV_FILE")
   set +a
 fi
 
