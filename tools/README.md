@@ -24,10 +24,12 @@ bash /tmp/sync_tools.sh
 ### 后台启动调优
 
 ```bash
-cp autotune.env.example autotune.env   # 按需编辑
+cp autotune.env.example autotune.env   # 按需编辑（含 BASELINE_ACC / BASELINE_ONNX / BASELINE_PTH）
 export AUTO_BACKGROUND=1
 bash /opt/vscc/plateai/tools/start_autotune.sh
 ```
+
+基线说明：`iter_train_platex_loop.sh` 会在 **`backups/OPTIMAL_*acc_0_926000*`** 存在时，把 **accepted 回滚快照** 初始化为该黄金 WE；bench 只有 **≥ BASELINE_ACC** 才覆盖 `BEST_EVAL`；训练后 verify 需 **同时优于会话最优且优于 BASELINE_ACC** 才保留部署。若整轮结束仍 **低于 BASELINE_ACC**，退出时会 **自动恢复** 基线 ONNX/`best.pth` 并更新 `BEST_EVAL`。
 
 ### 大池抽样（宿主机无 plateai 包时）
 

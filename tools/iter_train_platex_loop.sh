@@ -48,6 +48,15 @@ printf '%s\n' "$BENCH_MODE" >"$OUT/.bench_mode_env.txt"
 ACCEPTED_ONNX="${ACCEPTED_ONNX:-$BACK/accepted_plate_rec_color.onnx}"
 ACCEPTED_PTH="${ACCEPTED_PTH:-$BACK/accepted_best_we.pth}"
 
+# Golden WE baseline: rollback snapshots + optional exit restore when the whole run never reaches this acc.
+BASELINE_ACC="${BASELINE_ACC:-0.926}"
+BASELINE_ONNX="${BASELINE_ONNX:-$BACK/OPTIMAL_plate_rec_color_acc_0_926000.onnx}"
+BASELINE_PTH="${BASELINE_PTH:-$BACK/OPTIMAL_best_we_acc_0_926000.pth}"
+# If 1, on exit when session best_acc < BASELINE_ACC, copy BASELINE_* to platex + checkpoints and rewrite BEST_EVAL.
+AUTO_RESTORE_BASELINE="${AUTO_RESTORE_BASELINE:-1}"
+
+BASELINE_RESTORED=0
+
 log() { echo "[$(date -Iseconds)] $*"; }
 
 notify_async() {
@@ -101,6 +110,43 @@ rollback_accepted() {
   fi
 }
 
+restore_session_if_below_baseline() {
+  [[ "${AUTO_RESTORE_BASELINE:-1}" == "1" ]] || return 0
+  [[ -f "$BASELINE_ONNX" ]] || {
+    log "WARN: AUTO_RESTORE_BASELINE set but missing BASELINE_ONNX=$BASELINE_ONNX"
+    return 0
+  }
+  if [[ -z "${best_acc:-}" ]]; then
+    return 0
+  fi
+  if python3 - <<PY
+import sys
+ba=float("${best_acc}")
+bl=float("${BASELINE_ACC}")
+sys.exit(0 if ba < bl - 1e-9 else 1)
+PY
+  then
+    :
+  else
+    return 0
+  fi
+
+  log "session best_acc=$best_acc < baseline ${BASELINE_ACC}; restoring golden WE to ${PLATEX_MODELS} + ${CKPT}"
+  cp -a "$BASELINE_ONNX" "$PLATEX_MODELS/plate_rec_color.onnx"
+  if [[ -f "$BASELINE_PTH" ]]; then
+    cp -a "$BASELINE_PTH" "$CKPT/best.pth"
+  fi
+  save_optimal "$BASELINE_ACC" "baseline_exit"
+  best_acc="$BASELINE_ACC"
+  BASELINE_RESTORED=1
+  if [[ -n "$PLATEX_CID" ]]; then
+    log "restart platex after baseline restore $PLATEX_CID"
+    docker restart "$PLATEX_CID"
+    sleep 6
+  fi
+  notify_async "本轮 session 最高 acc 仍低于基线 ${BASELINE_ACC}，已自动把 platex / checkpoints 恢复为黄金 WE，BEST_EVAL.txt 已对齐。" "自动恢复基线 WE"
+}
+
 write_summary() {
   local reason="${1:-done}"
   local best_pth="" best_onnx="" eval_acc=""
@@ -120,9 +166,11 @@ write_summary() {
     echo "accepted_rollback_onnx=$ACCEPTED_ONNX"
     echo "out_dir=$OUT"
     echo "best_eval_file=$OUT/BEST_EVAL.txt"
+    echo "baseline_acc=${BASELINE_ACC}"
+    echo "baseline_restored=${BASELINE_RESTORED:-0}"
   } | tee "$OUT/TRAINING_SUMMARY.txt"
   log "======== OPTIMAL / MANUAL RESUME ========"
-  log "BEST_ACC (tracked)=${best_acc:-n/a}  BEST_EVAL acc=${eval_acc:-n/a}"
+  log "BEST_ACC (tracked)=${best_acc:-n/a}  BEST_EVAL acc=${eval_acc:-n/a}  baseline=${BASELINE_ACC}"
   log "BEST_WE_PTH=${best_pth:-n/a}"
   log "BEST_WE_ONNX=${best_onnx:-n/a}"
   log "ROLLBACK_PTH=${ACCEPTED_PTH}"
@@ -130,8 +178,14 @@ write_summary() {
   log "SUMMARY_FILE=$OUT/TRAINING_SUMMARY.txt"
 }
 
-# Seed rollback snapshots once so we always have a known-good pair after first deploy failure.
-if [[ ! -f "$ACCEPTED_ONNX" ]] && [[ -f "$PLATEX_MODELS/plate_rec_color.onnx" ]]; then
+# Seed rollback snapshots: prefer golden baseline files when present.
+if [[ -f "$BASELINE_ONNX" ]]; then
+  cp -a "$BASELINE_ONNX" "$ACCEPTED_ONNX"
+  if [[ -f "$BASELINE_PTH" ]]; then
+    cp -a "$BASELINE_PTH" "$ACCEPTED_PTH"
+  fi
+  log "accepted_* seeded from baseline (${BASELINE_ACC})"
+elif [[ ! -f "$ACCEPTED_ONNX" ]] && [[ -f "$PLATEX_MODELS/plate_rec_color.onnx" ]]; then
   cp -a "$PLATEX_MODELS/plate_rec_color.onnx" "$ACCEPTED_ONNX"
 fi
 if [[ ! -f "$ACCEPTED_PTH" ]] && [[ -f "$CKPT/best.pth" ]]; then
@@ -143,7 +197,7 @@ stall=0
 last_acc=""
 EXIT_REASON=""
 
-trap 'write_summary "${EXIT_REASON:-interrupted}"' EXIT
+trap 'restore_session_if_below_baseline; write_summary "${EXIT_REASON:-interrupted}"' EXIT
 
 for round in $(seq 1 "$MAX_ROUNDS"); do
   log "==== ROUND $round: benchmark ===="
@@ -185,9 +239,17 @@ sys.exit(0 if float("$acc") > float("$best_acc") + 1e-9 else 1)
 PY
   then
     best_acc="$acc"
-    save_optimal "$acc" "$round"
-    refresh_accepted
-    log "new best acc=$best_acc (bench)"
+    if python3 - <<PY
+import sys
+sys.exit(0 if float("$acc") >= float("$BASELINE_ACC") - 1e-9 else 1)
+PY
+    then
+      save_optimal "$acc" "$round"
+      refresh_accepted
+      log "new best acc=$best_acc (bench) — persisted (>= baseline ${BASELINE_ACC})"
+    else
+      log "bench acc=$acc (session max) below baseline ${BASELINE_ACC}; skip BEST_EVAL / accepted update"
+    fi
   fi
 
   if [[ -n "$last_acc" ]]; then
@@ -283,16 +345,17 @@ PY
 
     if python3 - <<PY
 import sys
-# Keep new weights only if strictly better than best_acc (tracked).
+# Keep deploy only if better than session best AND strictly better than golden baseline.
 ba = float("$best_acc")
 va = float("$vacc")
-sys.exit(0 if va > ba + 1e-9 else 1)
+bl = float("$BASELINE_ACC")
+sys.exit(0 if va > ba + 1e-9 and va > bl + 1e-9 else 1)
 PY
     then
       best_acc="$vacc"
       save_optimal "$vacc" "$round"
       refresh_accepted
-      log "verify improved best_acc=$best_acc — keeping new WE"
+      log "verify improved best_acc=$best_acc (> baseline ${BASELINE_ACC}) — keeping new WE"
     else
       log "verify did not improve (vacc=$vacc vs best_acc=$best_acc); rollback to accepted snapshots"
       rollback_accepted
