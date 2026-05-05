@@ -38,25 +38,23 @@ jobs:
             type=raw,value=${{ github.ref_name }}-cpu
             type=raw,value=cpu
 
-      # CUDA variants disabled during rapid train/validate iterations (long CI).
-      # Re-enable cuda11/cuda12 blocks before release when GPU images are needed again.
-      # - name: Compute CUDA11 image metadata
-      #   id: meta_cuda11
-      #   uses: docker/metadata-action@v5
-      #   with:
-      #     images: ghcr.io/${{ github.repository_owner }}/plateai
-      #     tags: |
-      #       type=raw,value=${{ github.ref_name }}-cuda11
-      #       type=raw,value=cuda11
-      #
-      # - name: Compute CUDA12 image metadata
-      #   id: meta_cuda12
-      #   uses: docker/metadata-action@v5
-      #   with:
-      #     images: ghcr.io/${{ github.repository_owner }}/plateai
-      #     tags: |
-      #       type=raw,value=${{ github.ref_name }}-cuda12
-      #       type=raw,value=cuda12
+      - name: Compute CUDA11 image metadata
+        id: meta_cuda11
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/plateai
+          tags: |
+            type=raw,value=${{ github.ref_name }}-cuda11
+            type=raw,value=cuda11
+
+      - name: Compute CUDA12 image metadata
+        id: meta_cuda12
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/plateai
+          tags: |
+            type=raw,value=${{ github.ref_name }}-cuda12
+            type=raw,value=cuda12
 
       - name: Build and push CPU image
         uses: docker/build-push-action@v6
@@ -71,28 +69,28 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # - name: Build and push CUDA11 image
-      #   uses: docker/build-push-action@v6
-      #   with:
-      #     context: .
-      #     file: Dockerfile
-      #     push: true
-      #     build-args: |
-      #       PLATEAI_RUNTIME=cuda11
-      #     tags: ${{ steps.meta_cuda11.outputs.tags }}
-      #     labels: ${{ steps.meta_cuda11.outputs.labels }}
-      #     cache-from: type=gha
-      #     cache-to: type=gha,mode=max
-      #
-      # - name: Build and push CUDA12 image
-      #   uses: docker/build-push-action@v6
-      #   with:
-      #     context: .
-      #     file: Dockerfile
-      #     push: true
-      #     build-args: |
-      #       PLATEAI_RUNTIME=cuda12
-      #     tags: ${{ steps.meta_cuda12.outputs.tags }}
-      #     labels: ${{ steps.meta_cuda12.outputs.labels }}
-      #     cache-from: type=gha
-      #     cache-to: type=gha,mode=max
+      - name: Build and push CUDA11 image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          build-args: |
+            PLATEAI_RUNTIME=cuda11
+          tags: ${{ steps.meta_cuda11.outputs.tags }}
+          labels: ${{ steps.meta_cuda11.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push CUDA12 image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          build-args: |
+            PLATEAI_RUNTIME=cuda12
+          tags: ${{ steps.meta_cuda12.outputs.tags }}
+          labels: ${{ steps.meta_cuda12.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
