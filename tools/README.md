@@ -49,6 +49,16 @@ docker run --rm --entrypoint python3 \
 
 ### 错例里只要新能源（20万_err → NEV 子集）
 
+宿主机已有 `python3` 时（脚本会自动把仓库根目录加入 `sys.path`，不必安装 wheel）：
+
+```bash
+python3 /opt/vscc/plateai/tools/filter_nev_csv.py \
+  --input /opt/vscc/plateai/data/20万_err.csv \
+  --output /opt/vscc/plateai/data/20万_err_nev.csv
+```
+
+无本地仓库时也可用镜像：
+
 ```bash
 docker run --rm --entrypoint python3 \
   -v /opt/vscc/plateai:/ws -w /ws \
