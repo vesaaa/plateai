@@ -13,3 +13,4 @@ checkpoints/
 runs/
 *.log
 tools/autotune.env
+tools/_tmp_*.py

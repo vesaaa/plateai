@@ -12,6 +12,20 @@ platex 在线识别 -> 收集识别失败样本 -> 人工修正真值标签
 替换 platex/models/plate_rec_color.onnx -> 重启服务 -> 复测
 ```
 
+## 官方 Release 权重（WE，与 platex Docker 默认一致）
+
+固定版本（推荐用于可复现部署与训练接力）：
+
+- 部署用 ONNX：`https://github.com/vesaaa/plateai/releases/download/v2026.5/plate_rec_color.onnx`
+- 训练接力用 checkpoint：`https://github.com/vesaaa/plateai/releases/download/v2026.5/best.pth`
+
+跟随 GitHub **Latest** 标签（文件名不变时会自动指向当前最新 release；缓存层可能更少失效）：
+
+- `https://github.com/vesaaa/plateai/releases/latest/download/plate_rec_color.onnx`
+- `https://github.com/vesaaa/plateai/releases/latest/download/best.pth`
+
+下载 `best.pth` 后，可通过 `--pretrained /path/to/best.pth`（或 `PLATEAI_PRETRAINED`）在上一轮权重上继续微调。
+
 ## Docker 快速开始
 
 ```bash
