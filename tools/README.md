@@ -8,6 +8,7 @@
 | `start_autotune.sh` | 启动迭代调优；可选 `autotune.env`（见 `autotune.env.example`）。 |
 | `iter_train_platex_loop.sh` | 核心循环：bench → 混合 CSV → Docker 训练 → 验证部署 / 回滚。 |
 | `sample_training_pool.py` | 从 10万/20万级 CSV 抽样训练池（建议在 Docker 内执行）。 |
+| `filter_nev_csv.py` | 从错例 CSV 中筛 **新能源（platex 同款结构规则）**，输出 `plate,path` 供继续训练。 |
 | `restore_optimal_we.sh` | 默认优先 **`BASELINE_ONNX`（0.926）**，其次 backups 里 **文件名 acc 最高** 的 OPTIMAL；**不再默认读 BEST_EVAL**（易被弱跑覆盖）。需按 BEST_EVAL 恢复时：`RESTORE_FROM_BEST_EVAL=1`。 |
 | `check_baseline_files.sh` | 启动前检查 `BASELINE_ONNX`/`BASELINE_PTH` 是否存在（`start_autotune.sh` 默认调用）。 |
 | `bench_platex_csv.py` | 固定集评测。 |
@@ -44,4 +45,15 @@ docker run --rm --entrypoint python3 \
   --input /ws/data/20万原图.csv \
   --output /ws/data/pool_sampled_50k.csv \
   --max-total 50000 --stratify-prefix
+```
+
+### 错例里只要新能源（20万_err → NEV 子集）
+
+```bash
+docker run --rm --entrypoint python3 \
+  -v /opt/vscc/plateai:/ws -w /ws \
+  ghcr.io/vesaaa/plateai:cpu \
+  /ws/tools/filter_nev_csv.py \
+  --input /ws/data/20万_err.csv \
+  --output /ws/data/20万_err_nev.csv
 ```
