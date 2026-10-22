@@ -319,6 +319,28 @@ python3 -m plateai.crnn.evaluate --run runs/crnn_s --data data/arr32x160 --plate
 | 粤 / 非粤 | 87.9% / 61.1% | 96.3% / 43.9% |
 | 置信度 ≥ 0.7 时 | — | 覆盖 92.5%，准确率 98.1% |
 
+### 标注清洗（`plateai.crnn.score` + `plateai.crnn.clean`）
+
+```bash
+python3 -m plateai.crnn.score --run runs/crnn_s --data data/arr32x160 --split train --out data/train_scored.jsonl
+python3 -m plateai.crnn.clean --data data/arr32x160 --scored data/train_scored.jsonl \
+    --trusted data/plate_mini_10w.csv --out data/arr32x160_clean
+```
+
+规则：`--trusted`（人工清洗过的 CSV）中的行全部保留；被人工清洗覆盖 ≥80% 的日期里、未进入 trusted 的行视为人工剔除；其余行在模型结果与标注编辑距离 ≥2 时剔除（干净数据上模型自身错误 88% 只差 1 个字，错标通常差多个字）。
+
+2026-10-22 实验（20 万集，用户清洗的 10w 作为 trusted；人工抽查确认被剔除行多为错标）：训练集 179,805 → 172,557。在 9,991 张干净留出测试图（留出集 ∩ 10w）上：
+
+| | 原模型 | 清洗后重训 |
+|---|---|---|
+| CRNN 单独 | 96.79% | 96.94% |
+| platex auto（阈值 0.7） | 98.80% | 98.69% |
+| 最优阈值融合（离线模拟） | 98.25% @0.7 | 98.25% @0.6 |
+
+结论：3–7% 的错标对训练影响很小，清洗后重训端到端无提升，未替换已发布权重。干净测试集上剩余约 1.2% 错误主要是外省 / `警` `学` 等稀有字符样本太少，以及模糊、截断的图片；下一步应补充稀有省份数据（或合成数据）并在 GPU 上训更大的模型。
+
+**评测提醒**：20 万集本身约有 7% 错标，评测请用干净的留出集（上表口径），否则会低估 2–3 个点（同一版本在含错标的完整测试集上为 95.6%，在干净集上为 98.8%）。
+
 已知短板：非粤省份样本太少（训练集中粤牌占 94%），剩余错误约一半是省份字；剩余错误中约 15–20% 为标注错误。权重发布在 release `crnn-2026.10-poc`（`plate_rec_crnn.onnx` / `best.pt`），该 tag 不以 `v` 开头，不会触发镜像构建。
 
 ## CI/CD 触发说明（重点）
