@@ -284,6 +284,43 @@ docker restart platex
 - `Dual model session pool initialized`（对应 `plate_rec_color.onnx`）
 - `WE recognizer loaded`
 
+## 全量训练新识别模型（PlateCRNN，实验中）
+
+`plate_rec_color` 只有 21 个 CTC 时间步，8 位新能源车牌漏位、连续重复字符（`DD`/`44`）被合并都是结构性问题，靠错例微调无法消除。`plateai/crnn/` 提供从头训练的新识别模型：
+
+- 输入 `32×160` BGR，`(x/255-0.5)/0.5`；CNN + BiLSTM，输出 `40` 个 CTC 时间步，字表 = `plate_rec_color` 字表 + `应急`（81 类，0 为 blank）。
+- 0.73M 参数，ONNX 约 2.9MB，单线程 CPU 推理约 2.5ms。
+
+流程（以 20 万人工标注小图为例）：
+
+```bash
+# 1) 把图片镜像到本地（只下载缺失的）
+python3 tools/fetch_images.py data/plate_20w.csv data/img 128
+
+# 2) 预处理 + 按车牌号切分（同一车牌不会同时出现在训练和测试集）
+python3 -m plateai.crnn.prep --csv data/plate_20w.csv --img-dir data/img --out data/arr32x160
+
+# 3) 训练（有 GPU 会自动用 cuda）
+python3 -m plateai.crnn.train --data data/arr32x160 --out runs/crnn_s --epochs 8
+
+# 4) 导出 ONNX 并评测；可选：同一测试集上 platex 的跑分做对比
+python3 tools/bench_platex_local.py data/arr32x160/test_split.csv data/img full data/test_full.jsonl
+python3 -m plateai.crnn.evaluate --run runs/crnn_s --data data/arr32x160 --platex-bench data/test_full.jsonl
+```
+
+`test_split.csv` 可由 `paste -d, test_labels.txt test_paths.txt` 生成。错例分析：`tools/analyze_bench_jsonl.py`（按错误类型归类）、`tools/error_sheet.py`（错例拼图，人工核对标注）。
+
+基线（2026-10-22，20 万集按车牌号留出 20,082 张测试，12 核 CPU 训练 8 轮约 2.5 小时）：
+
+| | platex v1.0.11（full） | PlateCRNN |
+|---|---|---|
+| 整体 | 86.5% | **93.5%** |
+| 7 位 / 8 位新能源 | 88.0% / 84.2% | 92.5% / 95.1% |
+| 粤 / 非粤 | 87.9% / 61.1% | 96.3% / 43.9% |
+| 置信度 ≥ 0.7 时 | — | 覆盖 92.5%，准确率 98.1% |
+
+已知短板：非粤省份样本太少（训练集中粤牌占 94%），剩余错误约一半是省份字；剩余错误中约 15–20% 为标注错误。权重发布在 release `crnn-2026.10-poc`（`plate_rec_crnn.onnx` / `best.pt`），该 tag 不以 `v` 开头，不会触发镜像构建。
+
 ## CI/CD 触发说明（重点）
 
 当前仓库的 GitHub Actions 工作流（`.github/workflows/build.yml`）触发条件是：

@@ -14,6 +14,10 @@
 | `check_baseline_files.sh` | 启动前检查 `BASELINE_ONNX`/`BASELINE_PTH` 是否存在（`start_autotune.sh` 默认调用）。 |
 | `bench_platex_csv.py` | 固定集评测。 |
 | `build_train_mix.py` | 错例 + 正样本池合并。 |
+| `fetch_images.py` | 把 CSV 里的图片镜像到本地目录（断点续传，只下缺失的）。 |
+| `bench_platex_local.py` | 用本地图片（`type=path`）评测 platex，输出逐张 JSONL。 |
+| `analyze_bench_jsonl.py` | 按错误类型（长度漂移、单字错、省份错）归类 JSONL 跑分结果。 |
+| `error_sheet.py` | 错例拼图（标注/识别结果标在图上），用于人工核对标注。 |
 
 ### 首次部署工具
 
