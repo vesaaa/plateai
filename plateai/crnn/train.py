@@ -80,6 +80,7 @@ def main(argv=None):
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     ap.add_argument("--threads", type=int, default=8, help="CPU threads (ignored on cuda)")
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--init", default=None, help="start from this state_dict (.pt) instead of random init (fine-tuning)")
     args = ap.parse_args(argv)
 
     torch.set_num_threads(args.threads)
@@ -99,7 +100,11 @@ def main(argv=None):
     idx = {c: i + 1 for i, c in enumerate(CHARS)}
     P(f"train={len(xtr)} test={len(xte)} classes={len(CHARS) + 1} device={device}")
 
-    model = PlateCRNN(c=parse_channels(args.channels)).to(device)
+    model = PlateCRNN(c=parse_channels(args.channels))
+    if args.init:
+        model.load_state_dict(torch.load(args.init, map_location="cpu"))
+        P(f"initialized from {args.init}")
+    model = model.to(device)
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
     steps_per_epoch = len(xtr) // args.batch_size
     sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=args.lr, total_steps=args.epochs * steps_per_epoch, pct_start=0.1)
